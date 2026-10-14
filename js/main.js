@@ -20,6 +20,25 @@ const VIEWS = {
 const NAV_PAGE = { strategy: "week", pick: "week", draft: "week", ready: "week", onboarding: "settings", connect: "settings" };
 
 const app = { settings: loadSettings(), data: null, backend: null, authors: [], author: null, authorCfg: {}, renderId: 0 };
+let dirty = false;
+let refreshTimer;
+let acceptedHash = location.hash;
+let restoringHash = false;
+
+function mayLeave() {
+  return !dirty || window.confirm("Discard your unsaved changes?");
+}
+
+window.addEventListener("beforeunload", (event) => {
+  if (dirty) { event.preventDefault(); event.returnValue = ""; }
+});
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("a[href]");
+  if (link && !link.download && link.target !== "_blank" && dirty) {
+    if (!mayLeave()) event.preventDefault();
+    else dirty = false;
+  }
+});
 
 function parseHash() {
   const [path, query = ""] = location.hash.replace(/^#\/?/, "").split("?");
@@ -42,6 +61,7 @@ async function connect() {
   } catch (e) {
     toast(`Could not read the repository: ${e.message}`, "bad");
     app.authors = [];
+    app.data = null;
     return false;
   }
   const want = parseHash().params.get("author") || app.settings.author;
@@ -69,6 +89,8 @@ function markNav(page) {
 }
 
 async function render() {
+  clearTimeout(refreshTimer);
+  dirty = false;
   const id = ++app.renderId;
   const { page, sub, params } = parseHash();
   const root = $("#view");
@@ -87,7 +109,33 @@ async function render() {
     data: app.data, backend: app.backend, settings: app.settings, authors: app.authors, author: app.author,
     authorCfg: app.authorCfg, page, sub, params, week: params.get("week") || postingWeek(tz), tz, go,
     refresh: () => { app.data?.invalidate(); render(); },
-    reconnect: async (patch) => { app.settings = saveSettings(patch); await connect(); renderNav(); go(app.author ? "week" : "onboarding"); },
+    setDirty: (value) => { dirty = value; },
+    allowNavigation: mayLeave,
+    watch: (read, initial) => {
+      const poll = async () => {
+        if (id !== app.renderId) return;
+        try {
+          if (!document.hidden && !dirty) {
+            app.data.invalidate();
+            const value = await read();
+            if (JSON.stringify(value) !== JSON.stringify(initial)) { render(); return; }
+          }
+        } catch { /* The visible view remains available while a refresh fails. */ }
+        refreshTimer = setTimeout(poll, 30000);
+      };
+      refreshTimer = setTimeout(poll, 30000);
+    },
+    reconnect: async (patch) => {
+      if (patch.backend === "github") {
+        const url = new URL(location.href);
+        url.searchParams.delete("local");
+        history.replaceState(null, "", url);
+      }
+      app.settings = saveSettings(patch);
+      await connect();
+      renderNav();
+      go(app.author ? "week" : "connect");
+    },
     reloadAuthors: async () => { app.data.invalidate(); app.authors = await app.data.authors(); renderNav(); },
   };
   root.innerHTML = '<div class="loading">Loading…</div>';
@@ -95,7 +143,19 @@ async function render() {
     const mod = await loader();
     if (id !== app.renderId) return;
     await mod.default(ctx, root);
-    if (id === app.renderId) root.focus({ preventScroll: true });
+    if (id === app.renderId) {
+      root.focus({ preventScroll: true });
+      if (app.data && app.author) {
+        const selectedAuthor = app.author;
+        app.data.week(selectedAuthor, postingWeek(tz)).then((week) => {
+          if (selectedAuthor !== app.author) return;
+          const nav = document.querySelector('[data-page="week"]');
+          const needs = ["strategy", "discovered", "drafted", "ready"].includes(week.state.stage);
+          nav?.classList.toggle("needs-attention", needs);
+          if (nav) nav.title = needs ? "A weekly decision is waiting" : "This week";
+        }).catch(() => {});
+      }
+    }
   } catch (e) {
     console.error(e);
     if (id !== app.renderId) return;
@@ -107,17 +167,25 @@ async function render() {
 }
 
 $("#author-select").addEventListener("change", (e) => {
+  if (!mayLeave()) { e.target.value = app.author; return; }
+  dirty = false;
   if (e.target.value === "__new") { location.hash = "#/onboarding/new"; return; }
   app.author = e.target.value;
   saveSettings({ author: app.author });
   renderNav();
   go(parseHash().page === "onboarding" ? "week" : parseHash().page);
 });
-window.addEventListener("hashchange", render);
+window.addEventListener("hashchange", () => {
+  if (restoringHash) { restoringHash = false; return; }
+  if (!mayLeave()) { restoringHash = true; location.replace(acceptedHash || "#/week"); return; }
+  acceptedHash = location.hash;
+  render();
+});
 
 (async () => {
   await connect();
   renderNav();
   if (!location.hash) go(app.data ? (app.author ? "week" : "onboarding") : "connect");
   else render();
+  acceptedHash = location.hash;
 })();

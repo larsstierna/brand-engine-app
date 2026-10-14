@@ -15,6 +15,12 @@ export default async function view(ctx, root) {
   }
   const img = await ctx.backend.readBlobURL(`${wk.path}/ready/card.png`).catch(() => null);
   const posted = wk.decisions.posted;
+  const reminder = (days) => {
+    const date = new Date(`${posted?.posted_at?.slice(0, 10)}T12:00:00Z`);
+    if (Number.isNaN(+date)) return "date unavailable";
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "short", timeZone: "UTC" });
+  };
 
   renderInto(root, html`
     ${pageHead({ eyebrow: weekEyebrow(ctx.week), title: "Ready to post", back,
@@ -22,10 +28,12 @@ export default async function view(ctx, root) {
       right: posted ? html`<span class="pill ok">Posted ${posted.posted_at || ""}</span>` : "" })}
     ${unreviewed ? html`<div class="notice warn">This draft was not approved before the deadline. Read it carefully before posting.</div>` : ""}
     ${needs ? html`<div class="notice warn">${needs}</div>` : ""}
+    ${posted ? html`<div class="notice ok">Posted ${posted.posted_at}. Numbers are due ${reminder(2)} and ${reminder(7)}. <a href="#/posts?author=${ctx.author}&rate=${ctx.week}">Add numbers</a></div>` : ""}
     <div class="split">
       <div class="main stack">
         <section class="card stack-s">
           <div class="row between"><h2>1 · Post text</h2><button class="btn primary small" data-copy="post">Copy post</button></div>
+          <p class="small muted">${ctx.authorCfg.schedule?.posting_time || "Post when your readers are active."}</p>
           <pre class="box" style="font-family:var(--font);font-size:15px">${post.trim()}</pre>
         </section>
         <section class="card row" style="gap:18px;align-items:flex-start">
@@ -62,4 +70,5 @@ export default async function view(ctx, root) {
     await withSaving(e.currentTarget, () => ctx.data.decide(ctx.author, ctx.week, "posted", { url, posted_at: $("#date", root).value }), "Marked as posted");
     ctx.refresh();
   });
+  root.addEventListener("input", () => ctx.setDirty(true));
 }

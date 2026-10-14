@@ -47,7 +47,8 @@ export default async function view(ctx, root) {
   if (ctx.sub === "moments") { await moments(ctx, root, tabsFor("moments")); bindTabs(); return; }
   const kind = KINDS.find((k) => k.id === ctx.sub) || KINDS[0];
   const lists = await Promise.all(KINDS.map((k) => ctx.data.inputs(ctx.author, k.id, 15).catch(() => [])));
-  const counts = Object.fromEntries(KINDS.map((k, i) => [k.id, lists[i].filter((x) => x.used !== "true").length]));
+  const isUsed = (item) => !!item.used && item.used !== "false";
+  const counts = Object.fromEntries(KINDS.map((k, i) => [k.id, lists[i].filter((item) => !isUsed(item)).length]));
   const items = lists[KINDS.indexOf(kind)];
 
   renderInto(root, html`
@@ -76,11 +77,12 @@ export default async function view(ctx, root) {
         <div style="flex:1;min-width:0">${x.title ? html`<strong>${x.title}</strong><br>` : ""}<span style="white-space:pre-wrap">${x.text}</span>
           ${x.url ? html`<div class="small"><a href="${x.url}" target="_blank" rel="noopener">${x.url}</a></div>` : ""}
           <div class="small muted">${x.date ? niceDate(x.date) : ""} · from ${x.source || "app"}</div></div>
-        <span class="chip ${x.used === "true" ? "" : "ok"}">${x.used === "true" ? "used" : "unused"}</span></div>`)}</div>`
+        <span class="chip ${isUsed(x) ? "" : "ok"}">${/^\d{4}-W\d{2}$/.test(x.used || "") ? html`<a href="#/ready?author=${ctx.author}&week=${x.used}">Used in ${x.used}</a>` : isUsed(x) ? "used" : "unused"}</span></div>`)}</div>`
         : html`<p class="muted small">Nothing yet.</p>`}
     </section>`);
 
   bindTabs();
+  root.addEventListener("input", () => ctx.setDirty(true));
   $("#add", root).addEventListener("click", async (e) => {
     const text = $("#text", root).value.trim();
     const title = $("#title", root)?.value.trim() || "";

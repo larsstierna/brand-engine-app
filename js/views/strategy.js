@@ -28,6 +28,7 @@ export default async function view(ctx, root) {
       sub: "Your strategy decides how the engine looks for stories and how the post is reasoned. The recommendation keeps your brand in balance; you can always choose another.",
       right: dec ? html`<span class="pill accent">Chosen: ${chosenName}</span>` : open ? html`<span class="pill warn">Answer by ${when(sched.strategy_by)}</span>` : "" })}
     ${brandStory(arc)}
+    <p class="small muted">Recent strategies: ${mem.posts.filter((post) => !post.history && post.week < ctx.week && post.week >= String(ctx.authorCfg.calibration_start || "") && post.move).slice(-4).map((post) => `${post.week}: ${libById[post.move]?.name || post.move}`).join("; ") || "No posts since your fresh start."}</p>
     ${!open ? html`<div class="notice info">Story cards for this week are already found${dec ? ` (strategy: ${chosenName})` : ""}. Changing the strategy now would need a new search: use “Find stories again” on This week.</div>` : ""}
     <div class="grid-2">${mine.map((id) => {
       const m = libById[id] || { id, name: id };
@@ -58,4 +59,5 @@ export default async function view(ctx, root) {
   };
   $$(".choose", root).forEach((b) => b.addEventListener("click", () => decide(b, { action: "choose", move: b.dataset.id }, "Strategy chosen. Finding stories…")));
   root.querySelector("#auto")?.addEventListener("click", (e) => decide(e.currentTarget, { action: "auto" }, "The engine will use its recommendation"));
+  ctx.watch(() => ctx.data.week(ctx.author, ctx.week), wk);
 }

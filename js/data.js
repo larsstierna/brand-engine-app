@@ -2,6 +2,7 @@
 
 import { load as yamlLoad, dump as yamlDump } from "../vendor/js-yaml.mjs";
 import { today } from "./util.js";
+import { scopedJob } from "./operations.js";
 
 export const YAML_HEADER = "# Edited in the Brand Engine app. Field guide: docs/FILE_FORMATS.md\n";
 
@@ -51,6 +52,21 @@ export class Data {
     return out;
   }
   author(id) { return this.yaml(`authors/${id}/author.yaml`, {}); }
+
+  health(id) { return this.json(`authors/${id}/health.json`, {}); }
+
+  async activity(id, week) {
+    if (!this.b.jobs) return { job: null, runs: [], unavailable: "Live workflow status is only available on GitHub." };
+    try {
+      const runs = await this.b.runs();
+      const relevant = runs.filter((run) => ["Engine", "Schedule"].includes(run.workflow)).slice(0, 4);
+      const groups = await Promise.all(relevant.map(async (run) => ({ run, jobs: await this.b.jobs(run.id) })));
+      const match = groups.find((group) => scopedJob(group.jobs, id, week));
+      return { runs, job: match ? { ...scopedJob(match.jobs, id, week), run: match.run } : null };
+    } catch (error) {
+      return { job: null, runs: [], unavailable: `Workflow status unavailable: ${error.message}` };
+    }
+  }
 
   async brand(id) {
     const b = `authors/${id}/brand`;

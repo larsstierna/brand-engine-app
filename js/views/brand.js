@@ -7,7 +7,7 @@ import { chainEditor, bindChainEditors, fullSteps, readChain } from "../chain-ed
 
 const TABS = [
   ["overview", "Overview"], ["destination", "Destination"], ["goals", "Goals"], ["topics", "Topics"], ["moves", "Post strategies"],
-  ["lenses", "Lenses"], ["voice", "Voice"], ["profile", "Profile and boundaries"], ["sources", "Sources"], ["schedule", "Schedule"],
+  ["lenses", "Lenses"], ["voice", "Voice"], ["profile", "Boundaries and profile"], ["sources", "Sources"], ["schedule", "Schedule and email"],
   ["reviews", "Reviews and proposals"],
 ];
 const DAYS = [["mon", "Monday"], ["tue", "Tuesday"], ["wed", "Wednesday"], ["thu", "Thursday"], ["fri", "Friday"], ["sat", "Saturday"], ["sun", "Sunday"]];
@@ -52,9 +52,9 @@ T.overview = async (ctx, d) => {
             <li><strong>Lenses</strong> give each post an angle only you would take.</li>
             <li><strong>Voice</strong>, <strong>profile</strong> and <strong>boundaries</strong> decide how it is written and what is never said.</li>
           </ol></section>
-        <section class="card stack"><h2>Setup check</h2>
+        <details class="stack" ${checks.some(([ok]) => !ok) ? "open" : ""}><summary>Setup check · ${checks.filter(([ok]) => !ok).length ? "needs attention" : "complete"}</summary>
           <ul style="list-style:none;margin:0;padding:0" class="stack-s">${checks.map(([ok, label, tab]) => html`<li class="row between">
-            <span><span class="chip ${ok ? "ok" : "warn"}">${ok ? "OK" : "To do"}</span> ${label}</span><a class="small" href="#/brand/${tab}?author=${ctx.author}">Edit</a></li>`)}</ul></section>
+            <span><span class="chip ${ok ? "ok" : "warn"}">${ok ? "OK" : "To do"}</span> ${label}</span><a class="small" href="#/brand/${tab}?author=${ctx.author}">Edit</a></li>`)}</ul></details>
       </div>
       <section class="card row between" style="gap:16px"><div class="stack-s" style="flex:1 1 320px"><h2>Recalibrate from your CV</h2>
         <p class="small muted">New role, new market, or just a fresh look? Upload your CV: Claude compares it with this brand, asks a few questions, and every suggested change comes back as a proposal you approve.</p></div>
@@ -478,29 +478,41 @@ T.schedule = async (ctx, d) => {
           <label class="field">Story cards per week<input type="number" id="cands" min="2" max="6" value="${a.candidates || 4}"></label>
           <label class="field">Time zone<input type="text" id="tz" value="${a.timezone || "Europe/Stockholm"}"></label>
         </div></section>
-      <section class="card stack"><h2>How cards are scored</h2><p class="small muted">Weights for a card's total. Goal need and strategy balance come from your recent posts; the rest from the engine's judgement.</p>
+      <details class="advanced-controls"><summary>Advanced · story ranking weights</summary><p class="small muted">Goal need favours under-covered goals; strategy balance favours under-used strategies. Significance measures impact, angle measures your distinct perspective, and freshness measures recency.</p>
         <div class="form-grid">${[["brand_fit", "Goal need (brand fit)"], ["move_fit", "Strategy balance"], ["significance", "Significance"], ["angle", "Your own angle"], ["freshness", "Freshness"]].map(([k, n]) => html`
-          <label class="field">${n}<input type="number" class="sc" data-k="${k}" min="0" max="100" value="${sc[k] ?? 0}"></label>`)}</div></section>
+          <label class="field">${n}<input type="number" class="sc" data-k="${k}" min="0" max="100" value="${sc[k] ?? 0}"></label>`)}</div></details>
       <section class="card stack"><h2>Email and image</h2>
         <div class="form-grid">
-          <label class="field">Email<input type="email" id="email" value="${a.email || ""}"></label>
+          <label class="field">Your recipient email<input type="email" id="email" value="${a.email || ""}"></label>
           <label class="field">Also send to (comma separated)<input type="text" id="email-also" value="${join(a.email_also)}"></label>
           <label class="field">Image style<select id="style"><option value="clean" ${vis.style !== "warm" ? "selected" : ""}>Clean (geometric)</option><option value="warm" ${vis.style === "warm" ? "selected" : ""}>Warm (editorial)</option></select></label>
           <label class="field">Default colour<select id="theme">${["blue", "teal", "slate", "terracotta", "sage", "plum", "mustard"].map((t) => html`<option ${vis.default_theme === t ? "selected" : ""}>${t}</option>`)}</select></label>
-        </div></section>
+        </div><div class="row"><button type="button" class="btn small" id="test-email">Send test email</button><span class="small muted">Uses your saved address: ${a.email || "no address saved"}. Save address changes before testing.</span></div></section>
       ${savebar()}`,
+    bind(root) {
+      $("#test-email", root).addEventListener("click", async (event) => {
+        if ($("#email", root).value.trim() !== (a.email || "")) { toast("Save your new email address before sending a test", "bad"); return; }
+        if (!a.email) { toast("Save a recipient email first", "bad"); return; }
+        await withSaving(event.currentTarget, () => ctx.backend.dispatch({ action: "test-email", author: ctx.author, week: ctx.week }), "Email test queued. Check Settings for the delivery result.");
+      });
+    },
     async save(root) {
       const v = (id) => $(id, root).value.trim();
       const email = v("#email");
       if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error("That email address looks wrong");
-      const scoring = {};
-      $$(".sc", root).forEach((i) => { scoring[i.dataset.k] = Number(i.value) || 0; });
+      const scoring = { ...(a.scoring || {}) };
+      $$(".sc", root).forEach((input) => {
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0 || value > 100) throw new Error("Ranking weights must be between 0 and 100");
+        if (value !== sc[input.dataset.k]) scoring[input.dataset.k] = value;
+      });
       const next = { ...a,
         email, email_also: csv(v("#email-also")), timezone: v("#tz") || "Europe/Stockholm", candidates: Number(v("#cands")) || 4,
         schedule: { ...s, strategy_gate: v("#gate") !== "no", strategy_prompt: { day: v("#strategy_prompt-day"), time: v("#strategy_prompt-time") },
           strategy_by: { day: v("#strategy_by-day"), time: v("#strategy_by-time") }, discover: { day: v("#discover-day"), time: v("#discover-time") }, pick_by: { day: v("#pick_by-day"), time: v("#pick_by-time") },
           approve_by: { day: v("#approve_by-day"), time: v("#approve_by-time") }, posting_time: v("#posting") },
-        defaults: { no_pick: v("#no-pick"), no_approval: v("#no-approval") }, scoring };
+        defaults: { ...(a.defaults || {}), no_pick: v("#no-pick"), no_approval: v("#no-approval") } };
+      if (Object.keys(scoring).length) next.scoring = scoring;
       const visual = { ...vis, style: v("#style"), default_theme: v("#theme") };
       return [
         { path: `authors/${ctx.author}/author.yaml`, content: ctx.data.dumpYaml(next) },
@@ -597,20 +609,33 @@ export default async function view(ctx, root) {
   const d = { brand, mem, voiceMd, profileMd, complianceMd, glossaryMd, sourcesCount: (srcs?.sources || []).filter((s) => s.enabled !== false).length };
   const t = await T[tab](ctx, d);
   renderInto(root, html`
-    ${pageHead({ title: "What you are building", sub: "Everything that steers your posts. Each change is saved to your repository with a date, so you can always see or undo it." })}
-    <nav class="subtabs" role="tablist" aria-label="Brand sections">${TABS.map(([id, label]) => html`<button role="tab" aria-selected="${id === tab}" data-tab="${id}">${label}</button>`)}</nav>
+    ${pageHead({ title: "What you are building", sub: "Your destination, your voice, your boundaries." })}
+    <details class="small muted"><summary>Saving and change history</summary><p>Saved changes are commits in your private repository. History and restoration are available on GitHub; structured form saves rewrite YAML without its comments.</p></details>
+    <a class="small" href="#/brand/profile?author=${ctx.author}">Your boundaries · what must never appear</a>
+    <nav class="brand-navigation" aria-label="Brand sections">${[
+      ["Overview", ["overview"]], ["What I am building", ["destination", "goals", "topics"]],
+      ["How I write", ["moves", "lenses", "voice", "profile"]], ["How it runs", ["sources", "schedule", "reviews"]],
+    ].map(([label, ids]) => html`<div><span class="small muted">${label}</span><div class="subtabs" role="tablist" aria-label="${label}">${ids.map((id) => html`<button role="tab" aria-selected="${id === tab}" data-tab="${id}">${TABS.find(([key]) => key === id)[1]}</button>`)}</div></div>`)}</nav>
     <div class="stack" id="tab">${t.html}</div>`);
-  $$(".subtabs button", root).forEach((b) => b.addEventListener("click", () => { location.hash = `#/brand/${b.dataset.tab}?author=${encodeURIComponent(ctx.author)}`; }));
+  $$(".subtabs button", root).forEach((b) => b.addEventListener("click", () => {
+    if (!ctx.allowNavigation()) return;
+    ctx.setDirty(false);
+    location.hash = `#/brand/${b.dataset.tab}?author=${encodeURIComponent(ctx.author)}`;
+  }));
   const tabRoot = $("#tab", root);
   t.bind?.(tabRoot);
   const saveBtn = $("#save", tabRoot);
   if (saveBtn && t.save) {
-    tabRoot.addEventListener("input", () => { $("#dirty", tabRoot).innerHTML = '<span class="dirty-dot"></span> Unsaved changes'; });
+    const markDirty = () => { ctx.setDirty(true); $("#dirty", tabRoot).innerHTML = '<span class="dirty-dot"></span> Unsaved changes'; };
+    tabRoot.addEventListener("input", markDirty);
+    tabRoot.addEventListener("change", markDirty);
+    tabRoot.addEventListener("click", (event) => { if (event.target.closest("button:not(#save):not(#test-email)")) markDirty(); });
     saveBtn.addEventListener("click", async () => {
       let files;
       try { files = await t.save(tabRoot); } catch (e) { toast(e.message, "bad"); return; }
       await withSaving(saveBtn, () => ctx.data.save(files, `app: ${ctx.author} edits ${TABS.find(([id]) => id === tab)[1].toLowerCase()}`), "Saved to your repository");
       $("#dirty", tabRoot).textContent = "";
+      ctx.setDirty(false);
       if (tab === "schedule") await ctx.reloadAuthors();
     });
   }

@@ -29,6 +29,8 @@ export class GitHubBackend {
         ...(opts.headers || {}),
       },
     });
+    const expiry = res.headers.get("github-authentication-token-expiration");
+    if (expiry) this.tokenExpiresAt = expiry;
     if (res.status === 404) return null;
     if (!res.ok) {
       let msg = `${res.status} ${res.statusText}`;
@@ -91,19 +93,20 @@ export class GitHubBackend {
   }
 
   async dispatch({ action, author, week = "", force = false }) {
-    await this.api("/actions/workflows/engine.yml/dispatches", {
+    const response = await this.api("/actions/workflows/engine.yml/dispatches", {
       method: "POST",
       body: JSON.stringify({ ref: this.branch, inputs: { action, author, week, force: String(force) } }),
     });
+    if (!response) throw new BackendError("The Engine workflow was not found. Check the repository and workflow setup.", 404);
     return { status: "started in GitHub Actions" };
   }
 
   async runs() {
-    const res = await this.api("/actions/runs?per_page=12");
+    const res = await this.api(`/actions/runs?per_page=12&branch=${encodeURIComponent(this.branch)}`);
     if (!res) return [];
     const data = await res.json();
     return (data.workflow_runs || []).map((r) => ({
-      name: r.display_title || r.name, workflow: r.name, status: r.status, conclusion: r.conclusion,
+      id: r.id, name: r.display_title || r.name, workflow: r.name, status: r.status, conclusion: r.conclusion,
       at: r.created_at, url: r.html_url, event: r.event,
     }));
   }
@@ -111,6 +114,15 @@ export class GitHubBackend {
   async whoami() {
     const res = await this.api("https://api.github.com/user");
     return res ? (await res.json()).login : null;
+  }
+
+  async jobs(runId) {
+    const res = await this.api(`/actions/runs/${encodeURIComponent(runId)}/jobs?per_page=100`);
+    if (!res) return [];
+    return (await res.json()).jobs.map((job) => ({
+      name: job.name, status: job.status, conclusion: job.conclusion, at: job.started_at,
+      url: job.html_url, steps: job.steps.map((step) => ({ name: step.name, status: step.status, conclusion: step.conclusion })),
+    }));
   }
 }
 
@@ -136,7 +148,9 @@ export class LocalBackend {
   }
   async dispatch(task) {
     const r = await this.req("/local/dispatch", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(task) });
-    return r.json();
+    const result = await r.json();
+    if (result.status !== "done") throw new BackendError(result.status || "The local step did not run");
+    return result;
   }
   async runs() {
     const r = await this.req("/local/runs");

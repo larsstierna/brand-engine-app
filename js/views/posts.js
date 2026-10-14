@@ -1,6 +1,6 @@
 // Posts and brand: is the brand moving? Goal coverage, every post with its numbers, and the positions taken.
 
-import { $, $$, html, toast } from "../util.js";
+import { $, $$, html, toast, shiftWeek } from "../util.js";
 import { pageHead, goalBars, moveBars, empty, withSaving, renderInto } from "../ui.js";
 
 const median = (xs) => {
@@ -37,13 +37,23 @@ export default async function view(ctx, root) {
   const all = [...mem.posts].reverse();
   const nHistory = all.filter(isHistory).length;
   const posts = showHistory ? all : all.filter((p) => !isHistory(p));
-  const counted = posts.filter((p) => p.status !== "skipped" && !isHistory(p));
+  const counted = posts.filter((p) => ["posted", "measured"].includes(p.status) && !isHistory(p));
   const ratings = counted.map((p) => p.rating);
   const saves = counted.map((p) => metric(p, "saves"));
   const nSaves = saves.filter((x) => typeof x === "number").length;
+  const recent = counted.filter((post) => post.week >= shiftWeek(ctx.week, -11) && post.week <= ctx.week);
+  const measured = recent.filter((post) => typeof post.metrics?.d7?.saves === "number");
+  const usual = median(measured.map((post) => post.metrics.d7.saves));
+  const best = measured.length >= 3 ? [...measured].sort((first, second) => second.metrics.d7.saves - first.metrics.d7.saves)[0] : null;
+  const missing = counted.filter((post) => !post.metrics?.d2 && !post.metrics?.d7).length;
+  const gap = [...(mem.ledger?.goals || [])].sort((first, second) => second.need - first.need)[0];
 
   renderInto(root, html`
     ${pageHead({ title: "Is your brand moving?", sub: `Every post, the goal it served and how it did. Last ${mem.ledger?.window_weeks || 12} weeks for goals.` })}
+    <section class="brand-insight"><p>${counted.length} published post${counted.length === 1 ? "" : "s"} since your fresh start.${gap ? ` Your next coverage opportunity: ${gap.question}` : " Your target mix will become clearer as you post."}</p>
+      <p class="small muted">${missing ? `${missing} published post${missing === 1 ? " is" : "s are"} missing numbers.` : "All published posts have at least one set of numbers."} Goal coverage measures your publishing mix, not audience response.</p>
+      ${best ? html`<p class="small">Most saves in the last 12 weeks: <a href="#/ready?author=${ctx.author}&week=${best.week}">${best.first_line || best.headline || best.week}</a> · ${best.metrics.d7.saves} day-7 saves.</p>` : html`<p class="small muted">Post comparisons appear after three day-7 save results. Day-2 and day-7 results are not mixed.</p>`}
+    </section>
     <div class="grid-4">
       <div class="stat"><div class="label">Posts</div><div class="value">${counted.length}</div></div>
       <div class="stat"><div class="label">Your rating, median</div><div class="value">${median(ratings) ?? "–"}</div></div>
@@ -70,14 +80,14 @@ export default async function view(ctx, root) {
           <td>${p.first_line || p.headline}${p.url ? html` · <a href="${p.url}" target="_blank" rel="noopener">post</a>` : ""}</td>
           <td>${p.goal || "–"}<div class="small muted">${[p.move, p.format].filter(Boolean).join(" · ")}</div></td>
           <td><span class="chip ${p.status === "posted" || p.status === "measured" ? "ok" : ""}">${p.status}</span></td>
-          <td class="num">${p.rating ?? "–"}</td><td class="num">${metric(p, "saves") ?? "–"}</td>
+          <td class="num">${p.rating ?? "–"}</td><td class="num">${metric(p, "saves") ?? "–"}${usual > 0 && measured.some((post) => post.week === p.week) && measured.length >= 3 ? html`<div class="small muted">${(p.metrics.d7.saves / usual).toFixed(1)}x usual · day 7</div>` : ""}</td>
           <td><button class="btn small add" data-week="${p.week}">${metric(p, "impressions") != null ? "Edit" : "Add numbers"}</button></td></tr>
           ${metricsForm(p)}`)}</tbody></table></div>` : empty("No posts yet", nHistory ? "Your brand counts from your first new post. Earlier posts are kept as history." : "Your posts appear here once the first week is done.")}
     </section>
     <section class="card stack" aria-labelledby="pos">
       <h2 id="pos">Positions you have taken</h2>
       ${mem.positions.length ? html`<div class="stack-s">${mem.positions.slice().reverse().map((p) => html`<div>
-        <strong>${p.text}</strong><div class="small muted">${p.week} · ${p.status}${p.updates?.length ? ` · ${p.updates.length} update(s)` : ""}</div></div>`)}</div>`
+        <strong>${p.text}</strong><div class="small muted"><a href="#/ready?author=${ctx.author}&week=${p.week}">${p.week} · post</a> · ${p.status}${p.updates?.length ? ` · ${p.updates.length} recorded update(s)` : " · No later updates recorded"}</div></div>`)}</div>`
         : html`<p class="muted small">Each post records the one position it takes, so later posts can build on it or update it openly.</p>`}
     </section>
   `);
@@ -87,6 +97,7 @@ export default async function view(ctx, root) {
     row.hidden = !row.hidden;
   }));
   const want = ctx.params.get("rate");
+  root.addEventListener("input", () => ctx.setDirty(true));
   if (want) { const row = $(`.metrics-row[data-week="${want}"]`, root); if (row) { row.hidden = false; row.scrollIntoView({ block: "center" }); } }
   $$(".metrics-form", root).forEach((f) => f.addEventListener("submit", async (e) => {
     e.preventDefault();

@@ -1,7 +1,8 @@
 // This week: the one thing that needs the author now, the week's progress, and how the brand is moving.
 
 import { html, niceDate, shiftWeek, toast } from "../util.js";
-import { pageHead, stepper, goalBars, moveBars, weekEyebrow, withSaving, engineNote, renderInto } from "../ui.js";
+import { pageHead, stepper, weekEyebrow, withSaving, engineNote, renderInto } from "../ui.js";
+import { ACTION_NAMES, jobAction, elapsed, failureMessage } from "../operations.js";
 
 const DAY = { mon: "Monday", tue: "Tuesday", wed: "Wednesday", thu: "Thursday", fri: "Friday", sat: "Saturday", sun: "Sunday" };
 const when = (s) => (s ? `${DAY[s.day] || s.day} ${s.time}` : "");
@@ -15,7 +16,7 @@ function nextAction(ctx, wk) {
   const chosen = decisions.strategy;
   switch (state.stage) {
     case "new":
-      if (chosen) return { tone: "info", title: "Finding stories for your strategy", text: "Your choice is in. Story cards arrive in about half an hour; you will get an email.", href: link("strategy"), cta: "See your choice", secondary: true };
+      if (chosen) return { tone: "info", title: "Your strategy is chosen", text: "Waiting for discovery to start. Live workflow status appears below.", href: link("strategy"), cta: "See your choice", secondary: true };
       if (gate) return { tone: "info", title: "First: which strategy this week?",
         text: `The question arrives ${when(sched.strategy_prompt) || "on Saturday"}, with a recommendation from your brand balance. You can answer now.`,
         href: link("strategy"), cta: "Choose the strategy", secondary: true };
@@ -23,7 +24,7 @@ function nextAction(ctx, wk) {
         text: `Discovery runs ${when(sched.discover) || "on schedule"} and finds 3-5 stories for your goals. You can also start it now.`,
         button: { id: "run-discover", label: "Find stories now" } };
     case "strategy":
-      if (chosen) return { tone: "info", title: "Finding stories for your strategy", text: "Your choice is in. Story cards arrive in about half an hour; you will get an email.", href: link("strategy"), cta: "See your choice", secondary: true };
+      if (chosen) return { tone: "info", title: "Your strategy is chosen", text: "Waiting for discovery to start. Live workflow status appears below.", href: link("strategy"), cta: "See your choice", secondary: true };
       return { tone: "warn", pill: `Needs you · due ${when(sched.strategy_by)}`, title: "Which strategy this week?",
         text: `Pick the post strategy for ${ctx.week}, or let the engine use its recommendation. If you don't answer, the recommendation is used.`,
         href: link("strategy"), cta: "Choose the strategy" };
@@ -34,12 +35,12 @@ function nextAction(ctx, wk) {
         href: link("pick"), cta: "Choose a story" };
     }
     case "picked":
-      return { tone: "info", title: "Writing your draft", text: "Researching the primary sources and drafting in your voice. You will get an email when it is ready.", href: link("pick"), cta: "See your pick", secondary: true };
+      return { tone: "info", title: "Your story is chosen", text: "The draft is the next step. Check live workflow status below.", href: link("pick"), cta: "See your pick", secondary: true };
     case "revising":
       return { tone: "info", title: "Revising your draft", text: `Working on your change request (round ${state.round + 1}).`, href: link("draft"), cta: "Open the draft", secondary: true };
     case "drafted":
       return { tone: "warn", pill: `Needs you · due ${when(sched.approve_by)}`, title: "Review your draft",
-        text: decisions.draft?.action === "change" ? "Your change request is queued." : "Check every claim and its source, then approve or ask for a change.",
+        text: decisions.draft?.action === "change" ? "Your change request is queued." : `Review the claims, then approve or ask for a change. Without your answer, ${ctx.authorCfg.defaults?.no_approval === "skip_week" ? "the week is skipped" : "the package is sent marked not reviewed; you still post it yourself"}.`,
         href: link("draft"), cta: "Review the draft" };
     case "approved":
       return { tone: "info", title: "Making the final package", text: "Image, first comment and reply kit.", href: link("draft"), cta: "Open the draft", secondary: true };
@@ -53,15 +54,15 @@ function nextAction(ctx, wk) {
     case "skipped":
       return { tone: "info", title: "Week skipped", text: "Nothing will be posted this week.", button: { id: "run-discover", label: "Find stories after all" } };
     case "failed":
-      return { tone: "bad", title: "A step failed", text: (state.history?.slice(-1)[0]?.note) || "See the run log in Settings.", button: { id: "run-discover", label: "Try discovery again" } };
+      return { tone: "bad", title: "The engine needs attention", text: failureMessage(state.history?.slice(-1)[0]?.note), href: `#/settings?author=${ctx.author}`, cta: "Check engine health" };
     default:
       return { tone: "info", title: state.stage, text: "" };
   }
 }
 
 export default async function view(ctx, root) {
-  const [wk, mem, strategy, onboarding] = await Promise.all([ctx.data.week(ctx.author, ctx.week), ctx.data.memory(ctx.author),
-    ctx.data.text(`authors/${ctx.author}/brand/strategy.yaml`), ctx.data.onboarding(ctx.author)]);
+  const [wk, mem, strategy, onboarding, activity, health] = await Promise.all([ctx.data.week(ctx.author, ctx.week), ctx.data.memory(ctx.author),
+    ctx.data.text(`authors/${ctx.author}/brand/strategy.yaml`), ctx.data.onboarding(ctx.author), ctx.data.activity(ctx.author, ctx.week), ctx.data.health(ctx.author)]);
   if (!strategy) {
     const msg = {
       none: ["Your brand is not set up yet", "Start with your CV and a few questions.", "Start onboarding"],
@@ -79,6 +80,32 @@ export default async function view(ctx, root) {
     return;
   }
   const act = nextAction(ctx, wk);
+  const job = activity.job;
+  const running = job && ["queued", "in_progress", "waiting", "pending"].includes(job.status);
+  const failed = job?.conclusion === "failure";
+  const action = jobAction(job);
+  const currentStep = job?.steps?.find((step) => step.status === "in_progress");
+  if (failed) {
+    act.tone = "bad";
+    act.pill = "Needs attention";
+    act.title = `${ACTION_NAMES[action] || "This step"} did not finish`;
+    const provider = health.claude;
+    act.text = provider?.status === "failed" && provider.week === ctx.week
+      ? provider.provider === "foundry" && provider.http_status === 404
+        ? "The Foundry endpoint or deployment was not found. Check the endpoint URL and exact deployment name in GitHub Actions variables."
+        : failureMessage(`${provider.error || ""} ${provider.http_status || ""}`)
+      : failureMessage(wk.state.history?.slice(-1)[0]?.note);
+    delete act.button;
+  }
+  if (running) {
+    act.tone = "info";
+    act.pill = job.status === "in_progress" ? "Engine working" : "Waiting for GitHub";
+    act.title = ACTION_NAMES[action] || "Working on your week";
+    act.text = `${job.status === "in_progress" ? elapsed(job.at) : "Queued on GitHub"}${currentStep ? ` · ${currentStep.name}` : ""}. This page checks for updates automatically.`;
+    delete act.button;
+  }
+  const counted = mem.posts.filter((post) => !post.history && post.week >= String(ctx.authorCfg.calibration_start || "") && ["ready", "posted", "measured"].includes(post.status));
+  const behind = [...(mem.ledger?.move_balance || [])].sort((first, second) => second.need - first.need)[0];
   const start = String(ctx.authorCfg.calibration_start || "");
   const last = [...mem.posts].reverse().find((p) => p.week < ctx.week && p.status !== "skipped" && !p.history && !(/^\d{4}-W\d{2}$/.test(start) && p.week < start));
   const prev = shiftWeek(ctx.week, -1), next = shiftWeek(ctx.week, 1);
@@ -91,6 +118,7 @@ export default async function view(ctx, root) {
       right: html`<div class="row"><a class="btn small" href="#/week?author=${ctx.author}&week=${prev}" aria-label="Previous week">← ${prev}</a>
         <a class="btn small" href="#/week?author=${ctx.author}&week=${next}" aria-label="Next week">${next} →</a></div>`,
     })}
+    ${activity.unavailable ? html`<div class="notice warn small">${activity.unavailable}</div>` : ""}
     <section class="card ${act.tone === "warn" ? "focus" : ""} row between" aria-labelledby="next-title" style="gap:20px">
       <div class="stack-s" style="flex:1 1 380px;min-width:0">
         ${act.pill ? html`<span class="pill ${pillClass}" style="align-self:flex-start">${act.pill}</span>` : ""}
@@ -100,6 +128,7 @@ export default async function view(ctx, root) {
       ${act.href ? html`<a class="btn ${act.secondary ? "" : "primary"}" href="${act.href}">${act.cta}</a>` : ""}
       ${act.button ? html`<button class="btn primary" id="${act.button.id}">${act.button.label}</button>` : ""}
     </section>
+    ${job ? html`<div class="row between small operational-strip"><span>${running ? "Live workflow" : failed ? "Latest workflow failed" : `Latest workflow: ${job.conclusion || job.status}`} · ${niceDate(job.at)}${failed ? ` · ${job.steps?.find((step) => step.conclusion === "failure")?.name || "Step failed"}` : ""}</span><a href="${job.url}" target="_blank" rel="noopener">Run details</a>${failed && action ? html`<button class="btn small" id="retry-step">Retry ${action}</button>` : ""}</div>` : html`<p class="small muted">No matching workflow found in recent runs. A saved choice is not proof that work has started.</p>`}
     <section class="card" aria-label="Progress">
       <h2 style="margin-bottom:16px">Progress</h2>
       ${stepper(wk.state, { strategy: `By ${when(ctx.authorCfg.schedule?.strategy_by)}`, picked: `By ${when(ctx.authorCfg.schedule?.pick_by)}`, approved: `By ${when(ctx.authorCfg.schedule?.approve_by)}` })}
@@ -107,11 +136,10 @@ export default async function view(ctx, root) {
     </section>
     <div class="grid-2">
       <section class="card stack" aria-labelledby="goals-title">
-        <h2 id="goals-title">Brand goals · last ${mem.ledger?.window_weeks || 12} weeks</h2>
-        ${goalBars(mem.ledger)}
-        <h3 style="margin-top:6px">Post strategies</h3>
-        ${moveBars(mem.ledger, { limit: 4 })}
+        <h2 id="goals-title">Your brand</h2>
+        <p>${counted.length} post${counted.length === 1 ? "" : "s"} since your fresh start.${behind ? ` ${behind.name} is furthest behind its target mix.` : " Your balance will appear after the next ledger update."}</p>
         <a href="#/posts?author=${ctx.author}" class="small">See all posts and goals</a>
+        <a href="#/inputs/mine?author=${ctx.author}" class="btn small">Add a first-hand note</a>
       </section>
       <section class="card stack" aria-labelledby="last-title">
         <h2 id="last-title">Last post</h2>
@@ -128,7 +156,7 @@ export default async function view(ctx, root) {
         : html`<p class="muted">No posts yet. Your brand counts from your first new post.</p>`}
       </section>
     </div>
-    <p class="small muted">Busy? Every step also arrives by email. Reply with a number to choose the strategy or a story, or “approve” to approve a draft. ${niceDate(wk.state.updated) ? `Last update: ${niceDate(wk.state.updated)}.` : ""}</p>
+    <p class="small muted">${health.email?.status === "sent" ? `Last email accepted by the mail server: ${niceDate(health.email.at)}. Check your inbox or spam folder.` : health.email?.status === "not_configured" ? "Email is not set up. Decisions are available here in the app." : "Email delivery has not been verified for this author."} ${niceDate(wk.state.updated) ? `Week updated: ${niceDate(wk.state.updated)}.` : ""}</p>
   `);
 
   root.querySelector("#run-discover")?.addEventListener("click", async (e) => {
@@ -136,4 +164,14 @@ export default async function view(ctx, root) {
       "Discovery started");
     toast(engineNote(ctx.backend));
   });
+  root.querySelector("#retry-step")?.addEventListener("click", async (event) => {
+    if (!window.confirm(`Retry ${action} for ${ctx.week}? Existing results from that step may be replaced.`)) return;
+    await withSaving(event.currentTarget, () => ctx.backend.dispatch({ action, author: ctx.author, week: ctx.week, force: true }), "Retry queued on GitHub");
+    ctx.refresh();
+  });
+  const needs = ["strategy", "discovered", "drafted", "ready"].includes(wk.state.stage) && !running;
+  const nav = document.querySelector('[data-page="week"]');
+  nav?.classList.toggle("needs-attention", needs);
+  if (nav) nav.title = needs ? (act.pill || "Your decision is needed") : "This week";
+  ctx.watch(async () => ({ week: await ctx.data.week(ctx.author, ctx.week), activity: await ctx.data.activity(ctx.author, ctx.week), health: await ctx.data.health(ctx.author), clock: running ? Math.floor(Date.now() / 60000) : 0 }), { week: wk, activity, health, clock: running ? Math.floor(Date.now() / 60000) : 0 });
 }

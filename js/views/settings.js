@@ -35,26 +35,48 @@ function connectForm(s) {
 export default async function view(ctx, root) {
   const s = ctx.settings;
   const connected = !!ctx.data;
-  const runs = connected ? await ctx.backend.runs().catch(() => []) : [];
+  const activity = connected && ctx.author ? await ctx.data.activity(ctx.author, ctx.week) : { runs: [] };
+  const runs = activity.runs;
+  const health = connected && ctx.author ? await ctx.data.health(ctx.author) : {};
+  const scheduled = runs.find((run) => run.workflow === "Schedule");
+  const successful = runs.find((run) => run.conclusion === "success");
+  const expires = ctx.backend?.tokenExpiresAt;
+  const expiresSoon = expires && Date.parse(expires) - Date.now() < 7 * 86400000;
   const now = new Date();
   const month = now.toISOString().slice(0, 7);
 
   renderInto(root, html`
     ${pageHead({ title: connected ? "Settings" : "Welcome to Brand Engine",
       sub: connected ? `Connected to ${ctx.backend.label()}.` : "Each week the engine finds stories that build your brand, you pick one, approve the draft and post it yourself. First, connect the app to your repository." })}
-    ${connectForm(s)}
+    ${connected ? html`<section class="health-summary" aria-label="Engine health">
+      <h2>Engine health</h2>
+      <dl class="health-grid">
+        <div><dt>Schedule</dt><dd>${scheduled ? `${scheduled.conclusion || scheduled.status} · ${niceDate(scheduled.at)}` : "No scheduled run found in recent history"}</dd></div>
+        <div><dt>Last successful workflow</dt><dd>${successful ? `${successful.workflow} · ${niceDate(successful.at)}` : "Not observed in recent history"}</dd></div>
+        <div><dt>Email for ${ctx.authorCfg.display_name || ctx.author}</dt><dd>${health.email ? `${health.email.status === "sent" ? "Accepted by mail server" : health.email.status === "not_configured" ? "Not configured" : "Last delivery failed"} · ${niceDate(health.email.at)}` : "Not tested yet"}</dd></div>
+        <div><dt>Claude</dt><dd>${health.claude ? `${health.claude.provider || "Provider unknown"} · ${health.claude.status} · ${niceDate(health.claude.at)}${health.claude.http_status ? ` · HTTP ${health.claude.http_status}` : ""}` : "Provider outcome not recorded yet"}</dd></div>
+        <div><dt>Email replies</dt><dd>${health.inbox ? `${health.inbox.status} · ${niceDate(health.inbox.at)}` : "Inbox check not recorded yet"}</dd></div>
+        <div><dt>Foundry backup</dt><dd>${health.claude?.backup_configured === true ? health.claude.provider === "foundry" && health.claude.status === "completed" ? "Last backup attempt completed" : "Configured; no successful backup observed in this record" : health.claude?.backup_configured === false ? "Not fully configured at last provider attempt" : "Configuration not recorded yet"}</dd></div>
+      </dl>
+      <p class="small muted">Provider results describe the last recorded attempt, not current quota. ${expires ? `GitHub reports token expiry: ${niceDate(expires)}.` : "GitHub did not report this token's expiry; check it in GitHub."}</p>
+      ${expiresSoon ? html`<p class="notice warn">Your GitHub token expires within a week or has expired. Replace it in Repository connection.</p>` : ""}
+      ${activity.unavailable ? html`<p class="notice warn">${activity.unavailable}</p>` : ""}
+      <a href="#/brand/schedule?author=${ctx.author}">Email address and test delivery</a>
+    </section>` : ""}
+    <details class="connection-details" ${connected ? "" : "open"}><summary>Repository connection${connected ? ` · ${ctx.backend.label()}` : ""}</summary>${connectForm(s)}</details>
     ${connected ? html`
-      <section class="card stack" aria-labelledby="r-h">
+      <details class="advanced-controls"><summary>Advanced · run an engine step</summary><section class="stack" aria-labelledby="r-h">
         <h2 id="r-h">Run a step now</h2>
         <p class="small muted">Everything runs on its own schedule. Use this to run a step early or again. On a phone you can also do it in the GitHub app: Actions → Engine → Run workflow.</p>
         <div class="form-grid">
           <label class="field">Author<select id="r-author">${ctx.authors.map((a) => html`<option value="${a.id}" ${a.id === ctx.author ? "selected" : ""}>${a.display_name || a.id}</option>`)}</select></label>
           <label class="field">Step<select id="r-action">${ACTIONS.map(([id, label]) => html`<option value="${id}">${label}</option>`)}</select></label>
           <label class="field">Week or month<input type="text" id="r-week" value="${ctx.week}" pattern="\\d{4}-(W\\d{2}|\\d{2})"><span class="hint">A week like ${ctx.week}, or a month like ${month} for reviews.</span></label>
-          <label class="field row" style="align-items:center;gap:8px;margin-top:22px"><input type="checkbox" id="r-force"> Run even if it is already done</label>
+          <label class="field row" style="align-items:center;gap:8px;margin-top:22px"><input type="checkbox" id="r-force"> Replace existing results even if already done</label>
         </div>
+        <p class="small muted">Forced runs can replace story cards, drafts, or packages. Normal weekly decisions belong on This week.</p>
         <button class="btn primary" id="run" style="align-self:flex-start">Start</button>
-      </section>
+      </section></details>
       <section class="card stack" aria-labelledby="h-h">
         <div class="row between"><h2 id="h-h">Recent runs</h2><button class="btn small" id="reload">Refresh</button></div>
         ${runs.length ? html`<div class="table-wrap"><table><thead><tr><th>Run</th><th>Status</th><th>Started</th></tr></thead><tbody>
@@ -97,7 +119,10 @@ export default async function view(ctx, root) {
     const kind = ACTIONS.find(([id]) => id === action)[2];
     if (kind === "month" && /^\d{4}-W/.test(week)) week = month;
     if (week && !(kind === "month" ? /^\d{4}-\d{2}$/ : /^\d{4}-W\d{2}$/).test(week)) { toast(kind === "month" ? "Use a month like 2026-11" : "Use a week like 2026-W43", "bad"); return; }
+    if ($("#r-force", root).checked && !window.confirm(`Replace existing ${action} results for ${$("#r-author", root).value}, ${week}? This may discard finished work.`)) return;
     withSaving(e.currentTarget, () => ctx.backend.dispatch({ action, author: $("#r-author", root).value, week, force: $("#r-force", root).checked }),
       ctx.backend.kind === "github" ? "Started. It shows under Recent runs in a few seconds." : "Done on this computer.").then(() => setTimeout(() => ctx.refresh(), 3000)).catch(() => {});
   });
+  root.addEventListener("input", () => ctx.setDirty(true));
+  if (connected && ctx.author) ctx.watch(async () => ({ activity: await ctx.data.activity(ctx.author, ctx.week), health: await ctx.data.health(ctx.author) }), { activity, health });
 }

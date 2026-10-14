@@ -58,6 +58,7 @@ export default async function view(ctx, root) {
       sub: "Ranked by the goal and post strategy your brand needs most now, how much the story matters, your own angle, and how fresh it is.",
       right: story ? html`<span class="pill accent">You chose ${story.action === "pick" ? `card ${cands.find((c) => c.id === story.candidate)?.rank || ""}` : story.action}</span>` : "" })}
     ${brandStory(arc, { chosen: chosenName })}
+    ${story?.action === "pick" ? html`<div class="notice ok">You chose card ${cands.find((candidate) => candidate.id === story.candidate)?.rank || ""}. The next step is drafting. <a href="#/week?author=${ctx.author}&week=${ctx.week}">Track progress</a>.</div>` : ""}
     ${locked ? html`<div class="notice info">The draft for this pick is already written. Picking again restarts the draft.</div>` : ""}
     <div class="grid-2">${cands.map((c) => card(c, story?.candidate === c.id, goalsById, movesById))}</div>
     <section class="card stack" aria-labelledby="ask">
@@ -80,12 +81,13 @@ export default async function view(ctx, root) {
   `);
 
   const decide = async (btn, data, msg) => {
+    if (locked && !window.confirm("This choice can replace your finished draft. Continue?")) return;
     const mine = $("#mine", root).value.trim();
     await withSaving(btn, () => ctx.data.decide(ctx.author, ctx.week, "story", { ...data, ...(mine ? { mine } : {}) }), msg);
     toast(engineNote(ctx.backend));
     ctx.refresh();
   };
-  $$(".choose", root).forEach((b) => b.addEventListener("click", () => decide(b, { action: "pick", candidate: b.dataset.id }, "Story chosen")));
+  $$(".choose", root).forEach((b) => b.addEventListener("click", () => decide(b, { action: "pick", candidate: b.dataset.id }, "Story chosen. Drafting is next; track it on This week.")));
   $("#wider", root).addEventListener("click", (e) => decide(e.currentTarget, { action: "wider", note: $("#wider-note", root).value.trim() }, "Searching wider"));
   $("#own", root).addEventListener("click", (e) => {
     const s = $("#own-story", root).value.trim();
@@ -96,4 +98,6 @@ export default async function view(ctx, root) {
     if (e.currentTarget.dataset.confirm !== "1") { e.currentTarget.dataset.confirm = "1"; e.currentTarget.textContent = "Tap again to skip this week"; return; }
     decide(e.currentTarget, { action: "skip" }, "Week skipped");
   });
+  root.addEventListener("input", () => ctx.setDirty(true));
+  ctx.watch(() => ctx.data.week(ctx.author, ctx.week), wk);
 }

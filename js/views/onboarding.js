@@ -104,7 +104,7 @@ function stepHtml(s) {
     <input type="time" data-k="${key}.time" value="${s[key].time}" aria-label="${label} time"></span></label>`;
   switch (s.step) {
     case 0: return html`
-      <p class="lead">Four short steps, then Claude reads your CV and comes back with what it found, a few questions, and a proposed brand for you to confirm or change.</p>
+      <p class="lead">Six short screens, then Claude reads your CV and returns questions and a proposed brand for you to confirm or change.</p>
       <div class="form-grid">
         <label class="field">Your name<input type="text" data-k="display_name" value="${s.display_name}" autocomplete="name"></label>
         <label class="field">Short id<input type="text" data-k="id" value="${s.id}" pattern="[a-z][a-z0-9-]+"><span class="hint">Lower-case, used for your folder, e.g. “alice”.</span></label>
@@ -312,6 +312,7 @@ async function followUp(ctx, root, id, ob) {
       sub: recal ? "Three short screens. When you send them, Claude plans how it will reason for you; every difference from your current brand then becomes a proposal you approve."
         : "Three short screens. When you send them, Claude plans how it will reason for you each week; you check that plan before anything is built." })}
     <ol class="stepper" aria-label="Screens">${SCREENS.map((n, i) => html`<li class="${i === 0 ? "now" : ""}" data-screen-tab="${i}"><div class="bar"></div><span class="name">${i + 1}. ${n}</span></li>`)}</ol>
+    <p class="notice info" id="confirmation-note">Screen 1 of 3. Your proposed brand is not built until you confirm the reasoning plan. Your boundaries apply to every post.</p>
     <div class="fu-screen stack" data-screen="0">
     <section class="card stack" aria-labelledby="found"><h2 id="found">What your CV shows</h2>
       <p class="lead">${an.summary || ""}</p>
@@ -402,6 +403,7 @@ async function followUp(ctx, root, id, ob) {
   let screen = 0;
   const show = (i) => {
     screen = i;
+    $("#confirmation-note", box).textContent = `Screen ${i + 1} of 3. Your proposed brand is not built until you confirm the reasoning plan. Your boundaries apply to every post.`;
     $$(".fu-screen", box).forEach((el) => { el.hidden = Number(el.dataset.screen) !== i; });
     $$("[data-screen-tab]", box).forEach((li) => { const n = Number(li.dataset.screenTab); li.className = n < i ? "done" : n === i ? "now" : ""; });
     $("#prev", box).disabled = i === 0;
@@ -555,6 +557,7 @@ function status(ctx, root, id, ob) {
       ${ctx.backend.kind === "local" ? html`<div class="notice info small">On this computer the Claude steps do not run; they run in GitHub Actions.</div>` : ""}
       <div class="row"><button class="btn primary" id="again">Check again</button><a class="btn" href="#/settings?author=${id}">See runs</a></div></section>`);
   $("#again", root).addEventListener("click", () => { ctx.data.invalidate(`authors/${id}/onboarding`); ctx.refresh(); });
+  ctx.watch(() => ctx.data.onboarding(id), ob);
 }
 
 function built(ctx, root, id, ob) {
@@ -572,6 +575,7 @@ function built(ctx, root, id, ob) {
 
 // ------------------------------------------------------------------------------------------------------------ router
 export default async function view(ctx, root) {
+  root.addEventListener("input", () => ctx.setDirty(true));
   if (!ctx.data) { ctx.go("connect"); return; }
   const id = ctx.params.get("author");
   if (ctx.sub === "new" || !id || !ctx.authors.some((a) => a.id === id)) return newAuthor(ctx, root);

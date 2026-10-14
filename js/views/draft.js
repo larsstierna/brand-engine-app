@@ -80,6 +80,7 @@ export default async function view(ctx, root) {
           <button class="btn primary" id="approve" ${editable ? "" : "disabled"}>Approve</button>
           <button class="btn" id="edit-toggle" ${editable ? "" : "disabled"}>Edit the text myself</button>
           <div id="edit-box" hidden class="stack-s">
+            <p class="small muted">Your wording is used as written. Source and voice checks run again; any findings appear in the ready package as warnings and do not block your version.</p>
             <label class="field">Your version<textarea id="edit-text" class="tall" style="font-family:var(--font);font-size:15px">${post.trim()}</textarea></label>
             <span class="small muted" id="edit-count"></span>
             <button class="btn primary" id="save-edit">Approve my version</button>
@@ -114,7 +115,7 @@ export default async function view(ctx, root) {
           return rows.length ? html`<section class="card stack-s" aria-labelledby="vr"><h2 id="vr">Voice rules</h2>
             <ul class="small" style="margin:0;padding-left:0;list-style:none">${rows.map(([, lv, id, name, text]) => html`<li style="margin-bottom:6px">
               <span class="chip ${lv === "BLOCK" ? "warn" : ""}" style="padding:0 6px;font-size:11px">${lv === "BLOCK" ? "fix" : "advice"}</span>
-              <span class="mono">${id}</span> <strong>${name}</strong>: ${text}</li>`)}</ul>
+              <strong>${name}</strong>: ${text}</li>`)}</ul>
             <a class="small" href="#/brand/voice?author=${ctx.author}">Change your voice rules</a></section>` : "";
         })()}
         <details class="card"><summary>Automatic checks (lint and claim ledger)</summary>
@@ -142,4 +143,6 @@ export default async function view(ctx, root) {
     await withSaving(e.currentTarget, () => ctx.data.decide(ctx.author, ctx.week, "draft", { action: "change", requests, note }), "Change requested");
     after();
   });
+  root.addEventListener("input", () => ctx.setDirty(true));
+  ctx.watch(() => ctx.data.week(ctx.author, ctx.week), wk);
 }
