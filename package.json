@@ -1,0 +1,6 @@
+{
+  "name": "brand-engine-app",
+  "private": true,
+  "description": "Static web app for Brand Engine. No build step: served as-is by GitHub Pages or `python -m engine serve`.",
+  "type": "module"
+}

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brand Engine</title>
+<meta name="description" content="Pick, approve and track the LinkedIn posts that build your brand.">
+<meta name="theme-color" content="#17201C">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+<div class="shell">
+  <nav class="nav" aria-label="Main">
+    <div class="brandmark"><span class="logo" aria-hidden="true"></span><span>Brand Engine</span></div>
+    <label class="author-pick">
+      <span class="sr">Author</span>
+      <select id="author-select" aria-label="Author"></select>
+    </label>
+    <div class="nav-week" id="nav-week"></div>
+    <ul class="nav-links" id="nav-links">
+      <li><a href="#/week" data-page="week">This week</a></li>
+      <li><a href="#/posts" data-page="posts">Posts and brand</a></li>
+      <li><a href="#/brand" data-page="brand">Brand and strategy</a></li>
+      <li><a href="#/inputs" data-page="inputs">Inputs</a></li>
+      <li><a href="#/settings" data-page="settings">Settings</a></li>
+    </ul>
+    <div class="nav-foot" id="nav-foot"></div>
+  </nav>
+  <main id="view" class="view" tabindex="-1" aria-live="polite">
+    <div class="loading">Loading…</div>
+  </main>
+</div>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

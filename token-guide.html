@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect Brand Engine to GitHub</title>
+<style>
+:root { color-scheme: light; --ink: #17201c; --muted: #56635b; --line: #d6ddd7; --blue: #2456a6; --blue-soft: #e8effa; --green: #247342; --paper: #fff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f2f4f1; color: var(--ink); font: 16px/1.55 "Segoe UI", Arial, sans-serif; }
+main { width: min(900px, calc(100% - 32px)); margin: 32px auto; background: var(--paper); border: 1px solid var(--line); padding: 36px 44px; }
+header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; border-bottom: 1px solid var(--line); padding-bottom: 24px; margin-bottom: 28px; }
+h1 { margin: 4px 0 8px; font-size: 30px; line-height: 1.15; }
+h2 { margin: 0; font-size: 20px; line-height: 1.25; }
+p { margin: 8px 0; }
+.eyebrow { color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.sub { color: var(--muted); max-width: 62ch; }
+button, .button { display: inline-flex; align-items: center; min-height: 42px; padding: 0 15px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); font: inherit; font-weight: 600; text-decoration: none; cursor: pointer; white-space: nowrap; }
+.button.primary { color: #fff; background: var(--blue); border-color: var(--blue); }
+section { margin: 28px 0; }
+.step-head { display: flex; gap: 14px; align-items: flex-start; }
+.num { display: grid; place-items: center; flex: 0 0 30px; height: 30px; border-radius: 50%; background: var(--blue-soft); color: var(--blue); font-weight: 700; }
+.step-copy { min-width: 0; }
+.step-copy p { color: var(--muted); }
+ol, ul { padding-left: 22px; }
+li { margin: 6px 0; }
+figure { margin: 16px 0 0 44px; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: #fff; }
+figure img { display: block; width: 100%; height: auto; }
+figcaption { padding: 8px 12px; color: var(--muted); border-top: 1px solid var(--line); font-size: 13px; }
+.note { margin: 20px 0 0 44px; padding: 12px 14px; border-left: 4px solid var(--green); background: #edf6ef; }
+.warn { border-left-color: #a45b00; background: #fff4df; }
+code { padding: 2px 5px; border-radius: 3px; background: #eef1ed; font: 13px Consolas, monospace; overflow-wrap: anywhere; }
+footer { margin-top: 34px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+@media (max-width: 620px) { main { margin: 0 auto; padding: 24px 18px; border: 0; } header { display: block; } header button { margin-top: 16px; } figure, .note { margin-left: 0; } h1 { font-size: 25px; } }
+@media print { body { background: #fff; } main { width: 100%; margin: 0; padding: 8mm; border: 0; } header button { display: none; } section { break-inside: avoid; } figure { break-inside: avoid; } a { color: inherit; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><div class="eyebrow">Brand Engine · connection guide</div><h1>Create a GitHub token for this computer</h1><p class="sub">The token lets this browser read your private Brand Engine repository and start its GitHub Actions. Create a separate token for each computer.</p></div>
+  <button type="button" onclick="window.print()">Print / Save as PDF</button>
+</header>
+<section>
+  <div class="step-head"><span class="num">1</span><div class="step-copy"><h2>Open fine-grained tokens</h2><p>In GitHub, open your profile menu → <strong>Settings</strong> → <strong>Developer settings</strong> → <strong>Personal access tokens</strong> → <strong>Fine-grained tokens</strong> → <strong>Generate new token</strong>.</p></div></div>
+</section>
+<section>
+  <div class="step-head"><span class="num">2</span><div class="step-copy"><h2>Name it and limit repository access</h2><p>Use a recognizable name such as <code>Brand Engine - Laptop</code>. Choose the resource owner <code>larsstierna</code>, an expiration you can maintain, and <strong>Only select repositories</strong>. Select only <code>brand-engine</code>.</p></div></div>
+  <figure><img src="token-guide-final-review.png" alt="GitHub fine-grained token form showing a single selected repository, 90-day expiry, and the required permissions"><figcaption>Example: only the private Brand Engine repository is selected, with a 90-day expiry. No token is created by this guide.</figcaption></figure>
+</section>
+<section>
+  <div class="step-head"><span class="num">3</span><div class="step-copy"><h2>Add only the required permissions</h2><p>Under <strong>Repository permissions</strong>, add these two permissions and set both to <strong>Read and write</strong>. Keep GitHub's required <strong>Metadata</strong> permission at <strong>Read-only</strong>. Do not grant account permissions.</p>
+    <ul><li><strong>Contents</strong>: Read and write</li><li><strong>Actions</strong>: Read and write</li><li><strong>Metadata</strong>: Read-only (required by GitHub)</li></ul>
+  </div></div>
+  <figure><img src="token-guide-permissions.png" alt="GitHub repository permissions list with Actions and Contents read and write, and Metadata read-only"><figcaption>These are the exact repository permissions the app needs.</figcaption></figure>
+</section>
+<section>
+  <div class="step-head"><span class="num">4</span><div class="step-copy"><h2>Generate and copy the token once</h2><p>Click <strong>Generate token</strong>, then copy the value immediately. GitHub will not show it again. Do not put this token in a repository file, an Actions secret, or a chat message.</p></div></div>
+  <div class="note warn"><strong>This is the GitHub access token.</strong> It is different from <code>ANTHROPIC_FOUNDRY_API_KEY</code>. The Foundry key belongs in GitHub Actions repository secrets; it does not go in this form.</div>
+</section>
+<section>
+  <div class="step-head"><span class="num">5</span><div class="step-copy"><h2>Connect Brand Engine</h2><p>Return to the app's <strong>Settings</strong> page. The owner, repository, and branch should be prefilled. Paste the token into <strong>Access token</strong>, then click <strong>Test and connect</strong>. The app stores it in this browser only; another computer needs its own token.</p></div></div>
+</section>
+<footer>GitHub changes its screens from time to time. The screenshots are examples of the current fine-grained token form. If a token is exposed, revoke it in GitHub and create a replacement.</footer>
+</main>
+</body>
+</html>

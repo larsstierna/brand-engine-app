@@ -1,0 +1,11 @@
+{
+  "name": "Brand Engine",
+  "short_name": "Brand",
+  "description": "Pick, approve and track the LinkedIn posts that build your brand.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F6F5F1",
+  "theme_color": "#17201C",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
