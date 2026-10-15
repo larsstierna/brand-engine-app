@@ -16,10 +16,14 @@ Never copy `authors/`, `memory/`, `sources/`, `weeks/`, or any secret into this 
 
 ## This week UI
 
-The weekly decision, package controls and progress records keep their original
-actions. The front page adds an animated decision ribbon, a bounded status canvas,
-and a read-only brand dashboard. Shared light/dark tokens and self-hosted fonts
-live in `styles.css`; no CDN, framework or build step is required.
+The entry page puts current post status and a compact brand summary first,
+followed by the current action, one fresh-post button, the decision ribbon and
+a visual workspace menu. The fresh-post button begins at strategy and retains
+confirmation, saved predecessors and queued/busy guards. Advanced step restarts
+and progress history live under Runs for the selected week. Detailed charts,
+goal focus and post inspection live on Brand progress, not on the entry page.
+Shared light/dark tokens and self-hosted fonts live in `styles.css`; no CDN,
+framework or build step is required.
 
 The dashboard reads only the loaded post memory and goal ledger. History,
 archived rows, future weeks, and posts before `calibration_start` are excluded;
