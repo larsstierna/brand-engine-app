@@ -1,0 +1,73 @@
+import { html, niceDate } from "./util.js";
+import { withSaving } from "./ui.js";
+
+const STEPS = [
+  { id: "strategy", label: "Choose strategy", page: "strategy" },
+  { id: "discover", label: "Find stories", page: "pick" },
+  { id: "pick", label: "Choose story", page: "pick", needs: "cards" },
+  { id: "draft", label: "Write draft", page: "draft", needs: "story" },
+  { id: "revise", label: "Revise requested changes", page: "draft", needs: "change" },
+  { id: "approve", label: "Review and approve", page: "draft", needs: "draft" },
+  { id: "finalize", label: "Build ready package", page: "ready", needs: "approved" },
+  { id: "posted", label: "Record posting", page: "ready", needs: "ready" },
+  { id: "metrics", label: "Record metrics", page: "posts", needs: "posted" },
+];
+
+function available(step, week) {
+  return !step.needs || ({ cards: !!week.candidates?.candidates?.length, story: ["pick", "own"].includes(week.decisions.story?.action),
+    change: week.artifacts.draft && week.decisions.draft?.action === "change", draft: week.artifacts.draft,
+    approved: week.artifacts.draft && ["approve", "edit"].includes(week.decisions.draft?.action),
+    ready: week.artifacts.ready, posted: week.artifacts.ready && !!week.decisions.posted })[step.needs];
+}
+
+const key = (ctx) => `package-restart:${ctx.author}:${ctx.week}`;
+function pending(ctx, week) {
+  try {
+    const request = JSON.parse(sessionStorage.getItem(key(ctx)) || "null");
+    if (request && week.package?.id !== request.previous && week.package?.id) {
+      sessionStorage.removeItem(key(ctx));
+      return null;
+    }
+    return request;
+  } catch { return null; }
+}
+
+export function packageControls(ctx, week, { busy = false, job = null } = {}) {
+  let waiting = pending(ctx, week);
+  if (waiting && job?.status === "completed" && job.conclusion !== "success" && Date.parse(job.at) >= Date.parse(waiting.at)) {
+    sessionStorage.removeItem(key(ctx));
+    waiting = null;
+  }
+  return html`<section class="package-controls stack" aria-label="Weekly package">
+    <div class="row between"><h2>Weekly package</h2><a href="#/runs?author=${ctx.author}&week=${ctx.week}">Past runs (${week.runs.length})</a></div>
+    <p class="small muted">${week.package ? `Opened ${niceDate(week.package.created_at)} from ${week.package.from_step}. Manual control; deadline defaults are paused.` : "Current package"}</p>
+    <div class="package-actions">
+      <label class="field">Step<select id="package-step">${STEPS.map((step) => html`<option value="${step.id}" ${available(step, week) ? "" : "disabled"}>${step.label}${available(step, week) ? "" : " (earlier input needed)"}</option>`)}</select></label>
+      <a class="btn" id="open-package-step" aria-disabled="${!!(busy || waiting)}" href="#/strategy?author=${ctx.author}&week=${ctx.week}">Open step</a>
+      <button class="btn primary" id="restart-package" ${busy || waiting ? "disabled" : ""}>Start new package</button>
+    </div>
+    <p class="small muted" id="package-status" role="status">${waiting ? "New package queued. This package stays visible until the saved replacement is available." : busy ? "Wait for the running workflow before starting another package." : "The current package is saved in Runs before this step and its later results are restarted."}</p>
+  </section>`;
+}
+
+export function bindPackageControls(ctx, root, week) {
+  const select = root.querySelector("#package-step");
+  if (!select) return;
+  const link = root.querySelector("#open-package-step");
+  link.addEventListener("click", (event) => { if (link.getAttribute("aria-disabled") === "true") event.preventDefault(); });
+  select.addEventListener("change", () => {
+    const step = STEPS.find((item) => item.id === select.value);
+    link.href = `#/${step.page}?${new URLSearchParams({ author: ctx.author, week: ctx.week, ...(step.id === "metrics" ? { rate: ctx.week } : {}) })}`;
+  });
+  root.querySelector("#restart-package").addEventListener("click", async (event) => {
+    const step = STEPS.find((item) => item.id === select.value);
+    if (!available(step, week)) return;
+    if (!window.confirm(`Start a new package from "${step.label}" for ${ctx.week}? The current package will be saved in Runs. Later results will be cleared from the new package; deadline defaults will be paused.`)) return;
+    const button = event.currentTarget;
+    try {
+      await withSaving(button, () => ctx.backend.dispatch({ action: `restart-${step.id}`, author: ctx.author, week: ctx.week }), "New package requested");
+      sessionStorage.setItem(key(ctx), JSON.stringify({ previous: week.package?.id || null, step: step.id, at: new Date().toISOString() }));
+      ctx.refresh();
+    } catch {}
+  });
+}
