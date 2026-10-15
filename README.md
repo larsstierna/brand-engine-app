@@ -16,7 +16,7 @@ Never copy `authors/`, `memory/`, `sources/`, `weeks/`, or any secret into this 
 
 ## This week UI
 
-The entry page puts current post status and a compact brand summary first,
+The entry page puts current post status and a short goal-mix barometer first,
 followed by the current action, one fresh-post button, the decision ribbon and
 a visual workspace menu. The fresh-post button begins at strategy and retains
 confirmation, saved predecessors and queued/busy guards. Advanced step restarts
@@ -24,6 +24,25 @@ and progress history live under Runs for the selected week. Detailed charts,
 goal focus and post inspection live on Brand progress, not on the entry page.
 Shared light/dark tokens and self-hosted fonts live in `styles.css`; no CDN,
 framework or build step is required.
+
+The barometer shows recorded twelve-week coverage against target shares, not
+audience growth or brand quality. One next-focus sentence replaces the old four
+metrics and per-goal bars; Brand progress owns the full analysis. Missing data
+shows no score or needle. Ready owns posting assets and the posting form, not
+restart controls or a second history list. The shared timeline owns package
+history; Runs owns all advanced restarts. Distinct review warnings are retained
+in one review-notes area, including on posted records.
+
+`automation.js` supplies one explanation of configured cutoffs and no-answer
+defaults. Home shows the current consequence; decision pages use a compact
+disclosure so the primary action stays visible on phones. The full week explains
+strategy/story/opinion/review defaults, manual posting, results and monthly review.
+Times use the author's timezone. Schedule checks are roughly every two hours and
+GitHub can delay them: a cutoff is not an exact task start. Manual packages pause
+deadline choices, not the engine steps that follow an explicit choice. Recorded
+send failures or inbox-check failures can pause email-dependent choices; matching
+late-send records can extend a reply window by 24 hours. The UI does not change
+these engine rules or claim that SMTP acceptance proves inbox receipt.
 
 The dashboard reads only the loaded post memory and goal ledger. History,
 archived rows, future weeks, and posts before `calibration_start` are excluded;
@@ -34,8 +53,8 @@ them with day-2 results. Missing values stay missing, including empty
 ledgers. Target shares come from the ledger. The calculation is explained in
 the dashboard's native disclosure.
 
-The status surface has moving material and lighting, with a deadline plaque only
-for a configured decision deadline. Ribbon and status entry are one coordinated
+The status surface has moving material and lighting; the shared automation
+component owns deadline information. Ribbon, meter needle and status entry are one coordinated
 transform/opacity sequence under 300 ms. Goal focus links bars, weekly dots and
 post rows without recalculating totals; each weekly post dot opens its recorded
 details. Keyboard focus updates without entrance effects. Successful saves show
