@@ -42,6 +42,19 @@ details. Keyboard focus updates without entrance effects. Successful saves show
 a temporary check without changing the button label or dimensions. Active
 effects cancel immediately when reduced motion is enabled.
 
+Pointer navigation uses the browser's View Transitions API when available:
+the old workspace exits in 192 ms while the new one enters in 240 ms, using
+transform and opacity only. Other browsers get the visible content-entrance
+fallback. The sidebar stays in place. Keyboard navigation and reduced motion
+update immediately. Rapid navigation skips older transitions; background polls
+do not replay page entrances.
+
+Native disclosures, opened editors and added form rows have pointer-triggered
+feedback through `bindPageMotion`; view events and observers are cleaned up on
+navigation. Goal focus, save confirmation and the bounded status canvas remain
+active on their respective pages. The recorded preview includes navigation
+through Brand, Inputs, Runs and Posts as well as the status and chart interactions.
+
 Run `node app/operations.test.mjs` from the repository root and
 `npm run --prefix app test:ui` for mocked browser regressions. The browser suite
 captures the populated and empty dashboard at 1440 px and 390 px in both themes,
